@@ -13,5 +13,6 @@ namespace BlackjackApi.Dtos
         int MinBet,
         int MaxBet,
         bool IsGameOver,
+        bool CanOfferInsurance,
         string? LastMessage);
 }

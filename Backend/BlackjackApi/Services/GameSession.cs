@@ -4,44 +4,16 @@ using BlackjackApi.Models;
 
 namespace BlackjackApi.Services
 {
-    /// <summary>
-    /// Owns EVERY piece of session state now that GameEngine is stateless
-    /// (Option B) - current player/table/deck/dealer, whose hand is active,
-    /// the last message, and even the diagram-native GameEngine fields
-    /// (Turn, _cardInHands, _players, OnCheckCardPlayer/Dealer) that used to
-    /// live on GameEngine itself. Those last few were never actually read
-    /// anywhere beyond basic bookkeeping even before this refactor - they're
-    /// kept here unchanged (not deleted) purely so nothing behaves
-    /// differently, just relocated since a stateless GameEngine has nowhere
-    /// left to put them.
-    ///
-    /// Also the orchestrator: decides the order GameEngine's (now fully
-    /// parameterized) methods get called in for a full round.
-    /// </summary>
+
     public class GameSessionService
     {
-        // ---------------------------------------------------------------
-        // Demo-scope simplification: one in-memory session shared by every
-        // request (no auth, no per-user sessions).
-        // ---------------------------------------------------------------
         private readonly GameEngine _engine = new();
         private Player? _player;
         private Table? _table;
         private Deck? _deck;
-        private Dealer _dealer = new();
+        private Dealer? _dealer;
         private string? _lastMessage;
         private int _activeHandIndex;
-
-        // Diagram-native GameEngine fields, relocated here now that
-        // GameEngine can't hold any state at all - see class note above.
-        private readonly List<Player> _players = new();
-        private readonly Dictionary<Player, List<Hand>> _cardInHands = new();
-        public int Turn { get; private set; }
-        public Action<int, ChipType>? OnCheckCardPlayer;
-        public Action<int, ChipType>? OnCheckCardDealer;
-
-        public void NextTurn(Player p) => Turn++;
-        public bool HasPlayer() => _players.Count > 0;
 
         public GameStateDto NewGame(NewGameRequest req)
         {
@@ -65,9 +37,6 @@ namespace BlackjackApi.Services
                 throw new ArgumentException("Max bet harus lebih besar atau sama dengan min bet.");
             }
 
-            _players.Clear();
-            _cardInHands.Clear();
-            Turn = 0;
 
             _player = new Player(req.Name, req.StartingBalance);
             _table = new Table(1, req.MinBet, req.MaxBet);
@@ -75,10 +44,6 @@ namespace BlackjackApi.Services
             _dealer = new Dealer();
             _lastMessage = "Game baru dimulai.";
             _activeHandIndex = 0;
-
-            _players.Add(_player);
-            _cardInHands[_player] = _player.Hands;
-
             return BuildState();
         }
 
@@ -152,7 +117,6 @@ namespace BlackjackApi.Services
                 _table,
                 _dealer);
 
-            _cardInHands[_player] = _player.Hands;
             _lastMessage = "Kartu dibagikan.";
             _activeHandIndex = 0;
 
@@ -169,9 +133,9 @@ namespace BlackjackApi.Services
             return BuildState();
         }
 
-        public GameStateDto HandleAction(ActionRequest req)
+         public GameStateDto HandleAction(ActionRequest req)
         {
-            if (_player == null || _table == null || _deck == null)
+            if (_player == null || _table == null || _deck == null || _dealer == null)
             {
                 throw new InvalidOperationException(
                     "Panggil NewGame dulu.");
@@ -200,8 +164,13 @@ namespace BlackjackApi.Services
                 _dealer);
 
             _lastMessage = result.Message;
+            
+            if (!result.Success)
+            {
+                return BuildState();
+            }
 
-            if (req.Action == ActionType.Split)
+            if (req.Action == ActionType.Split || req.Action == ActionType.Insurance)
             {
                 return BuildState();
             }
@@ -255,20 +224,9 @@ namespace BlackjackApi.Services
             return -1;
         }
 
-        public GameStateDto GetState()
-        {
-            if (_player == null)
-            {
-                throw new InvalidOperationException(
-                    "Belum ada game aktif.");
-            }
-
-            return BuildState();
-        }
-
         private GameStateDto BuildState()
         {
-            if (_player == null || _table == null)
+            if (_player == null || _dealer == null || _table == null || _deck == null)
             {
                 throw new InvalidOperationException("Game belum dimulai. Panggil NewGame dulu.");
             }
@@ -283,12 +241,23 @@ namespace BlackjackApi.Services
                 _player.Hands.Select(h => HandDto.From(_engine, h)).ToList(),
                 _activeHandIndex,
                 DealerDto.From(_engine, _dealer),
-                _engine?.RemainingCard(_deck) ?? 0,
+                _engine.RemainingCard(_deck),
                 _table.Rounds.Count,
                 _table.MinBet,
                 _table.MaxBet,
                 isGameOver,
+                CanOfferInsurance(),
                 _lastMessage);
+        }
+        private bool CanOfferInsurance()
+        {
+            if (_player == null || _dealer == null) return false;
+            if (_activeHandIndex < 0 || _activeHandIndex >= _player.Hands.Count) return false;
+
+            var hand = _player.Hands[_activeHandIndex];
+            if (hand.Cards.Count != 2 || hand.IsFinished || hand.InsuranceTaken) return false;
+
+            return _dealer.Hand.Cards.Count > 0 && _dealer.Hand.Cards[0].Rank == Rank.Ace;
         }
     }
 }

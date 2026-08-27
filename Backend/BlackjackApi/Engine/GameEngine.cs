@@ -3,41 +3,10 @@ using BlackjackApi.Models;
 
 namespace BlackjackApi.Engine
 {
-    /// <summary>
-    /// GameEngine implements IGameAction, IBetting and IDeck.
-    ///
-    /// STATELESS BY DESIGN (Option B): GameEngine holds NO instance state at
-    /// all - no "current player/deck/table", no dealer field, nothing that
-    /// persists between calls. Every method takes everything it needs as a
-    /// parameter and mutates/reads only what's passed in. All session state
-    /// (which player, which table, which deck, whose turn) lives entirely in
-    /// GameSessionService instead.
-    ///
-    /// DEVIATION FROM DIAGRAM: the three interfaces' method signatures were
-    /// corrected (not just worked around) to carry the parameters they
-    /// actually need - see IGameAction/IBetting/IDeck for the specifics of
-    /// each. An earlier version of this class kept the diagram's exact
-    /// signatures and made the under-specified ones throw
-    /// NotSupportedException, with a second "real" overload doing the actual
-    /// work. That's gone now: since the interfaces themselves were fixed,
-    /// each method here directly and fully implements its interface member -
-    /// no throwing stubs, no duplicate overloads.
-    /// </summary>
+
     public class GameEngine : IGameAction, IBetting, IDeck
     {
         private const int MaxScore = 21;
-
-        /// <summary>
-        /// DEVIATION FROM DIAGRAM: diagram had two ambiguous fields,
-        /// OnCheckCardPlayer/OnCheckCardDealer (both Action&lt;int, ChipType&gt;),
-        /// with no further context anywhere on what "checking a card" has to
-        /// do with a chip amount and chip type - they were also never invoked
-        /// anywhere. Re-purposed as ONE event whose name actually matches its
-        /// parameter types: fires whenever any player's chip balance changes
-        /// (bet placed, payout won, refund, etc.). The "dealer" variant was
-        /// dropped - Dealer never holds chips/a Balance in this domain, so a
-        /// second event for it would have nothing to report.
-        /// </summary>
         public event Action<int, ChipType>? OnChipsChanged;
 
         // ---------- Deck operations ----------
@@ -45,7 +14,7 @@ namespace BlackjackApi.Engine
         public Deck CreateStandardDeck()
         {
             var deck = new Deck();
-            var ranks = Enum.GetValues<Rank>(); // all 13 named members, even though some share a value
+            var ranks = Enum.GetValues<Rank>(); 
             var suits = Enum.GetValues<Suit>();
 
             var freshCards = new List<Card>();
@@ -116,13 +85,6 @@ namespace BlackjackApi.Engine
         public int GetTotalBalance(Player p) => p.Balance.Sum(kv => (int)kv.Key * kv.Value);
 
         // ---------- Game lifecycle ----------
-
-        /// <summary>
-        /// DEVIATION FROM DIAGRAM: takes an explicit Dealer parameter (the
-        /// diagram signature only has Player/Deck/Table). A stateless engine
-        /// has nowhere else to keep "the dealer" - the caller creates a fresh
-        /// Dealer and passes it in, and this method deals into it directly.
-        /// </summary>
         public void StartGame(Player p, Deck deck, Table table, Dealer dealer)
         {
             p.Hands.Clear();
@@ -138,13 +100,7 @@ namespace BlackjackApi.Engine
             dealer.Hand.Cards.Add(DrawCard(deck));
             dealer.HoleCardHidden = true;
         }
-
-        /// <summary>
-        /// DEVIATION FROM DIAGRAM: return type fixed from the diagram's typo
-        /// "boo" to "bool". Stateless version: everything needed to decide
-        /// "is there an active round for this player" is derivable purely
-        /// from table.Rounds, so no engine-side bookkeeping is needed at all.
-        /// </summary>
+        
         public bool ResumeGame(Player p, Table table)
         {
             var lastRound = table.Rounds.LastOrDefault();
@@ -152,6 +108,7 @@ namespace BlackjackApi.Engine
             {
                 return false; // no round, or last round already resolved
             }
+
             return true;
         }
 
@@ -173,12 +130,6 @@ namespace BlackjackApi.Engine
 
         // ---------- Card actions ----------
 
-        /// <summary>
-        /// Implements IGameAction directly - the interface signature now
-        /// includes Dealer (see IGameAction's deviation note), so there's no
-        /// longer any need for a throwing/limited stub plus a "real" overload.
-        /// This is the one and only PerformAction.
-        /// </summary>
         public ActionResult PerformAction(Player p, ActionType action, Deck deck, Hand h, Dealer dealer)
         {
             // Guard: an already-finished hand (busted, or the player already
@@ -196,6 +147,7 @@ namespace BlackjackApi.Engine
                     {
                         return SuccessResult("Kartu diambil. Bust!");
                     }
+
                     return SuccessResult("Kartu diambil.");
 
                 case ActionType.Stand:
@@ -207,10 +159,12 @@ namespace BlackjackApi.Engine
                     {
                         return FailResult("Double down hanya boleh dilakukan di 2 kartu pertama.");
                     }
+
                     if (GetTotalBalance(p) < p.CurrentBet)
                     {
                         return FailResult("Saldo tidak cukup untuk double down.");
                     }
+
                     RemoveChips(ChipType.White, p.CurrentBet, p);
                     p.CurrentBet *= 2;
                     h.Cards.Add(DrawCard(deck));
@@ -219,6 +173,7 @@ namespace BlackjackApi.Engine
                     {
                         return SuccessResult("Double down. Bust!");
                     }
+
                     return SuccessResult("Double down selesai.");
 
                 case ActionType.Split:
@@ -226,10 +181,12 @@ namespace BlackjackApi.Engine
                     {
                         return FailResult("Split hanya boleh jika 2 kartu punya nilai sama.");
                     }
+
                     if (GetTotalBalance(p) < p.CurrentBet)
                     {
                         return FailResult("Saldo tidak cukup untuk split.");
                     }
+
                     RemoveChips(ChipType.White, p.CurrentBet, p);
                     var secondCard = h.Cards[1];
                     h.Cards.RemoveAt(1);
@@ -247,34 +204,45 @@ namespace BlackjackApi.Engine
                     return SuccessResult("Menyerah, setengah taruhan dikembalikan.");
 
                 case ActionType.Insurance:
+                    // Real blackjack gates: only at the very start of the hand
+                    // (2 cards, nothing else taken yet), only once, and only
+                    // when the dealer's visible up-card is an Ace.
+                    if (h.Cards.Count != 2 || h.IsFinished)
+                    {
+                        return FailResult("Insurance cuma bisa diambil sebelum aksi lain di tangan ini.");
+                    }
+
+                    if (h.InsuranceTaken)
+                    {
+                        return FailResult("Insurance sudah diambil untuk tangan ini.");
+                    }
+
+                    if (dealer.Hand.Cards.Count == 0 || dealer.Hand.Cards[0].Rank != Rank.Ace)
+                    {
+                        return FailResult("Insurance cuma tersedia kalau kartu terbuka dealer itu As.");
+                    }
+
                     int insuranceCost = p.CurrentBet / 2;
                     if (GetTotalBalance(p) < insuranceCost)
                     {
                         return FailResult("Saldo tidak cukup untuk insurance.");
                     }
+
+                    h.InsuranceTaken = true;
                     RemoveChips(ChipType.White, insuranceCost, p);
                     if (dealer.Hand.Cards.Count == 2 && GetHandScore(dealer.Hand) == 21)
                     {
                         AddChips(ChipType.White, insuranceCost * 3, p);
+                        h.IsFinished = true;
                         return SuccessResult("Insurance dibayar, dealer blackjack.");
+                        
                     }
+                    
                     return SuccessResult("Insurance diambil, dealer bukan blackjack.");
-
                 default:
                     return FailResult("Aksi tidak dikenal.");
             }
         }
-
-        /// <summary>
-        /// DEVIATION FROM DIAGRAM: no longer takes Hand/ActionType/HandResult
-        /// parameters. It used to compute HandScore/IsBusted/IsBlackjack here
-        /// (via GetHandScore/IsHandBusted/IsHandBlackjack) and stash them on
-        /// ActionResult - but nothing ever read those fields (GameSessionService
-        /// only reads .Message), and BuildState() recomputes the exact same
-        /// values moments later for HandDto anyway. Simplified down to what's
-        /// actually needed: a message and a success flag.
-        /// </summary>
-   
 
         private static ActionResult SuccessResult(string message)
         {
@@ -283,7 +251,9 @@ namespace BlackjackApi.Engine
                 Success = true,
                 Message = message
             };
-        } private static ActionResult FailResult(string message)
+        }
+
+        private static ActionResult FailResult(string message)
         {
             return new ActionResult
             {
@@ -294,12 +264,7 @@ namespace BlackjackApi.Engine
 
         // ---------- Winner evaluation ----------
 
-        /// <summary>
-        /// DEVIATION FROM DIAGRAM: takes an explicit Dealer parameter. Not
-        /// tied to any interface, so it was always free to add what it needs
-        /// - same idea as PlaceBet/RemainingCard/PerformAction now that their
-        /// interfaces were corrected too.
-        /// </summary>
+  
         public string EvaluateWinner(Player p, Table table, Dealer dealer)
         {
             var round = table.Rounds.LastOrDefault();
@@ -378,26 +343,18 @@ namespace BlackjackApi.Engine
                 deck.Cards.Push(card);
             }
         }
-
-        /// <summary>
-        /// Implements IDeck directly - the interface signature now includes
-        /// Deck (see IDeck's deviation note), so no throwing stub needed.
-        /// </summary>
+        
         public int RemainingCard(Deck deck) => deck.Cards.Count;
 
         // ---------- IBetting ----------
 
-        /// <summary>
-        /// Implements IBetting directly - the interface signature now
-        /// includes Player and Table (see IBetting's deviation note), so no
-        /// throwing stub needed.
-        /// </summary>
         public bool PlaceBet(Player p, Table table, int amount)
         {
             if (!IsValidBet(table, amount))
             {
                 return false;
             }
+
             if (GetTotalBalance(p) < amount)
             {
                 return false;
@@ -411,13 +368,7 @@ namespace BlackjackApi.Engine
         public bool IsValidBet(Table table, int amount) => amount >= table.MinBet && amount <= table.MaxBet;
 
         // ---------- Chips ----------
-
-        /// <summary>
-        /// DEVIATION FROM DIAGRAM: Player parameter is required (not
-        /// optional/defaulted) now that there's no "current player" fallback
-        /// to fall back to - a stateless engine simply has nowhere else to
-        /// get a player from.
-        /// </summary>
+        
         private int AddChips(ChipType type, int totalChips, Player player)
         {
             player.Balance.TryGetValue(type, out var current);
