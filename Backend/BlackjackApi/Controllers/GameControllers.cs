@@ -4,14 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BlackjackApi.Controllers
 {
-    /// <summary>
-    /// REST API Controller for Blackjack game operations.
-    /// 
-    /// This controller receives HTTP requests and passes them
-    /// to GameSessionService.
-    /// 
-    /// Base route: /api/game
-    /// </summary>
+
     [ApiController]
     [Route("api/game")]
     public class GameController : ControllerBase

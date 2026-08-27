@@ -18,6 +18,6 @@ namespace BlackjackApi.Models
             // White * balance = balance
             Balance[ChipType.White] = balance;
         }
-        public int GetTotalBalance() => Balance.Sum(kv => (int)kv.Key * kv.Value);
+      
     }
 }

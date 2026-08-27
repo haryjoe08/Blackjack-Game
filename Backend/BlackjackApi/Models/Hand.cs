@@ -9,5 +9,7 @@ namespace BlackjackApi.Models
 
         // True when the hand is surrendered.
         public bool IsSurrendered { get; set; }
+        
+        public bool InsuranceTaken { get; set; }
     }
 }
