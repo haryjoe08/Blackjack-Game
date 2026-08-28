@@ -10,14 +10,14 @@ namespace BlackjackApi.Models
         public string Name { get; set; }
         public Dictionary<ChipType, int> Balance { get; set; } = new();
         public List<Hand> Hands { get; set; } = new() { new Hand() };
+
         public Player(string name, int balance)
         {
             Name = name;
-            PlayerId = _nextId;
+            PlayerId = _nextId++;
             // Balance is set to White because White = 1;
             // White * balance = balance
             Balance[ChipType.White] = balance;
         }
-      
     }
 }

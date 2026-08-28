@@ -3,11 +3,9 @@ using BlackjackApi.Models;
 
 namespace BlackjackApi.Engine
 {
-
     public class GameEngine : IGameAction, IBetting, IDeck
     {
         private const int MaxScore = 21;
-        public event Action<int, ChipType>? OnChipsChanged;
 
         // ---------- Deck operations ----------
 
@@ -25,12 +23,11 @@ namespace BlackjackApi.Engine
                     freshCards.Add(new Card(rank, suit));
                 }
             }
-
-            var rng = new Random();
-            foreach (var card in freshCards.OrderBy(_ => rng.Next()))
+            foreach (var card in freshCards)
             {
                 deck.Cards.Push(card);
             }
+            ShuffleDeck(deck);
 
             return deck;
         }
@@ -85,15 +82,10 @@ namespace BlackjackApi.Engine
         public int GetTotalBalance(Player p) => p.Balance.Sum(kv => (int)kv.Key * kv.Value);
 
         // ---------- Game lifecycle ----------
-        public void StartGame(Player p, Deck deck, Table table, Dealer dealer)
+        public void StartGame(Player p, Deck deck, Dealer dealer)
         {
             p.Hands.Clear();
             p.Hands.Add(new Hand());
-
-            var round = new GameRound { RoundNumber = table.Rounds.Count + 1 };
-            table.Rounds.Add(round);
-
-            // Standard opening deal: player, dealer, player, dealer (dealer's 2nd card hidden).
             p.Hands[0].Cards.Add(DrawCard(deck));
             dealer.Hand.Cards.Add(DrawCard(deck));
             p.Hands[0].Cards.Add(DrawCard(deck));
@@ -101,22 +93,16 @@ namespace BlackjackApi.Engine
             dealer.HoleCardHidden = true;
         }
         
-        public bool ResumeGame(Player p, Table table)
+        public bool ResumeGame(Player p, Dealer dealer)
         {
-            var lastRound = table.Rounds.LastOrDefault();
-            if (lastRound == null || lastRound.ResultsByPlayerId.ContainsKey(p.PlayerId))
-            {
-                return false; // no round, or last round already resolved
-            }
-
-            return true;
+            bool roundInProgress = dealer.HoleCardHidden && p.Hands.Any(h => h.Cards.Count > 0);
+            return roundInProgress;
         }
 
         public void PlayDealerTurn(Dealer dealer, Deck deck)
         {
-            dealer.HoleCardHidden = false;
+            RevealDealerHand(dealer);
 
-            // Standard rule: dealer hits until at least 17 (stands on soft 17).
             while (GetHandScore(dealer.Hand) < 17)
             {
                 dealer.Hand.Cards.Add(DrawCard(deck));
@@ -132,8 +118,6 @@ namespace BlackjackApi.Engine
 
         public ActionResult PerformAction(Player p, ActionType action, Deck deck, Hand h, Dealer dealer)
         {
-            // Guard: an already-finished hand (busted, or the player already
-            // stood/doubled/surrendered on it) can't take any more actions.
             if (IsHandFinished(h) && action != ActionType.Insurance)
             {
                 return FailResult("Tangan ini sudah selesai, tidak bisa diambil aksi lagi.");
@@ -204,9 +188,6 @@ namespace BlackjackApi.Engine
                     return SuccessResult("Menyerah, setengah taruhan dikembalikan.");
 
                 case ActionType.Insurance:
-                    // Real blackjack gates: only at the very start of the hand
-                    // (2 cards, nothing else taken yet), only once, and only
-                    // when the dealer's visible up-card is an Ace.
                     if (h.Cards.Count != 2 || h.IsFinished)
                     {
                         return FailResult("Insurance cuma bisa diambil sebelum aksi lain di tangan ini.");
@@ -235,7 +216,6 @@ namespace BlackjackApi.Engine
                         AddChips(ChipType.White, insuranceCost * 3, p);
                         h.IsFinished = true;
                         return SuccessResult("Insurance dibayar, dealer blackjack.");
-                        
                     }
                     
                     return SuccessResult("Insurance diambil, dealer bukan blackjack.");
@@ -264,10 +244,9 @@ namespace BlackjackApi.Engine
 
         // ---------- Winner evaluation ----------
 
-  
         public string EvaluateWinner(Player p, Table table, Dealer dealer)
         {
-            var round = table.Rounds.LastOrDefault();
+          
             var messages = new List<string>();
 
             foreach (var hand in p.Hands)
@@ -304,7 +283,7 @@ namespace BlackjackApi.Engine
                 }
 
                 messages.Add(ResultHand(p, result));
-                round?.ResultsByPlayerId.TryAdd(p.PlayerId, result);
+                
             }
 
             return string.Join(" | ", messages);
@@ -373,7 +352,6 @@ namespace BlackjackApi.Engine
         {
             player.Balance.TryGetValue(type, out var current);
             player.Balance[type] = current + totalChips;
-            OnChipsChanged?.Invoke(totalChips, type);
             return player.Balance[type];
         }
 
@@ -382,7 +360,6 @@ namespace BlackjackApi.Engine
             player.Balance.TryGetValue(type, out var current);
             var updated = Math.Max(0, current - totalChips);
             player.Balance[type] = updated;
-            OnChipsChanged?.Invoke(-totalChips, type);
             return updated;
         }
     }

@@ -1,12 +1,10 @@
 using System.Text.Json.Serialization;
 using BlackjackApi.Services;
+using BlackjackApi.Engine;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Controllers use a separate JSON pipeline from minimal API's
-// ConfigureHttpJsonOptions, so the string-enum converter (needed so the
-// React frontend can send/receive "Hit" instead of a raw number) has to be
-// registered here too.
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
@@ -17,29 +15,32 @@ builder.Services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddSingleton<GameEngine>();
 
-// GameSessionService holds ALL session state now that GameEngine is
-// stateless (Option B) - see its own comments for why Singleton is fine
-// here and where a real multi-user app would need to change this.
 builder.Services.AddSingleton<GameSessionService>();
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactDev", policy =>
     {
-        // Vite's default dev server port. Adjust if your frontend runs elsewhere.
         policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
 });
 
+// Membangun aplikasi Web API berdasarkan konfigurasi builder di atas
 var app = builder.Build();
+
 
 app.UseSwagger();
 app.UseSwaggerUI();
 
+// Menerapkan aturan izin CORS yang sudah dikonfigurasi sebelumnya
 app.UseCors("AllowReactDev");
+
+// Memetakan HTTP request yang masuk ke masing-masing Controller yang sesuai
 app.MapControllers();
 
+// Menjalankan HTTP web server ASP.NET Core
 app.Run();

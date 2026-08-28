@@ -9,7 +9,6 @@ namespace BlackjackApi.Dtos
         int ActiveHandIndex,
         DealerDto Dealer,
         int RemainingCards,
-        int RoundNumber,
         int MinBet,
         int MaxBet,
         bool IsGameOver,

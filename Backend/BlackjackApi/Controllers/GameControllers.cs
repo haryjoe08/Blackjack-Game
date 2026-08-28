@@ -4,151 +4,99 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BlackjackApi.Controllers
 {
-
     [ApiController]
     [Route("api/game")]
     public class GameController : ControllerBase
     {
         private readonly GameSessionService _session;
 
-        /// <summary>
-        /// Constructor injection of the game session service.
-        /// </summary>
         public GameController(GameSessionService session)
         {
             _session = session;
         }
-
-        /// <summary>
+        
+        
         /// POST /api/game/new
-        /// 
-        /// Starts a new Blackjack game session.
-        /// </summary>
+      
         [HttpPost("new")]
-        public ActionResult<GameStateDto> NewGame(
-            [FromBody] NewGameRequest req)
+        public ActionResult<GameStateDto> NewGame([FromBody] NewGameRequest req)
         {
             try
             {
-                GameStateDto state = _session.NewGame(req);
+                GameStateDto state = _session.NewGame(req, out string gameId);
 
-                return Ok(state);
+                return Ok(new { gameId, state });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new
-                {
-                    message = ex.Message
-                });
+                return BadRequest(new { message = ex.Message });
             }
         }
 
-        /// <summary>
-        /// GET /api/game/resume
-        /// 
-        /// Resumes the current Blackjack game session.
-        /// </summary>
-        [HttpGet("resume")]
-        public ActionResult<GameStateDto> Resume()
+   
+        /// GET /api/game/{gameId}/resume
+
+        [HttpGet("{gameId}/resume")]
+        public ActionResult<GameStateDto> Resume(string gameId)
         {
             try
             {
-                GameStateDto state = _session.ResumeSession();
-
+                GameStateDto state = _session.ResumeSession(gameId);
                 return Ok(state);
             }
             catch (InvalidOperationException ex)
             {
-                return NotFound(new
-                {
-                    message = ex.Message
-                });
+                return NotFound(new { message = ex.Message });
             }
         }
 
-        /// <summary>
-        /// POST /api/game/bet
-        /// 
-        /// Places a bet for the current Blackjack game.
-        /// </summary>
-        [HttpPost("bet")]
-        public ActionResult<GameStateDto> PlaceBet(
-            [FromBody] BetRequest req)
+ 
+        /// POST /api/game/{gameId}/bet
+        
+        [HttpPost("{gameId}/bet")]
+        public ActionResult<GameStateDto> PlaceBet(string gameId, [FromBody] BetRequest req)
         {
             try
             {
-                GameStateDto state = _session.HandleBet(req);
-
+                GameStateDto state = _session.HandleBet(gameId, req);
                 return Ok(state);
             }
-            catch (ArgumentException ex)
+            catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
             {
-                return BadRequest(new
-                {
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    message = ex.Message
-                });
+                return BadRequest(new { message = ex.Message });
             }
         }
-
-        /// <summary>
-        /// POST /api/game/deal
-        /// 
-        /// Deals the initial cards and starts the Blackjack round.
-        /// </summary>
-        [HttpPost("deal")]
-        public ActionResult<GameStateDto> Deal()
+        
+        /// POST /api/game/{gameId}/deal
+        [HttpPost("{gameId}/deal")]
+        public ActionResult<GameStateDto> Deal(string gameId)
         {
             try
             {
-                GameStateDto state = _session.Deal();
-
+                GameStateDto state = _session.Deal(gameId);
                 return Ok(state);
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new
-                {
-                    message = ex.Message
-                });
+                return BadRequest(new { message = ex.Message });
             }
         }
 
         /// <summary>
-        /// POST /api/game/action
-        /// 
-        /// Performs a player action such as Hit, Stand,
-        /// Double, Split, or Insurance.
+        /// POST /api/game/{gameId}/action
+        /// Performs a player action.
         /// </summary>
-        [HttpPost("action")]
-        public ActionResult<GameStateDto> PerformAction(
-            [FromBody] ActionRequest req)
+        [HttpPost("{gameId}/action")]
+        public ActionResult<GameStateDto> PerformAction(string gameId, [FromBody] ActionRequest req)
         {
             try
             {
-                GameStateDto state = _session.HandleAction(req);
-
+                GameStateDto state = _session.HandleAction(gameId, req);
                 return Ok(state);
             }
-            catch (ArgumentException ex)
+            catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
             {
-                return BadRequest(new
-                {
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    message = ex.Message
-                });
+                return BadRequest(new { message = ex.Message });
             }
         }
     }
