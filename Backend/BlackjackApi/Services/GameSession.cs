@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using BlackjackApi.Dtos;
 using BlackjackApi.Engine;
 using BlackjackApi.Models;
+using BlackjackApi.Models.Enums;
 
 namespace BlackjackApi.Services
 {
@@ -17,26 +18,23 @@ namespace BlackjackApi.Services
             OnGameLog += (message) => Console.WriteLine($"[LOG GAME] {message}");
         }
 
-        public GameStateDto NewGame(NewGameRequest req, out string gameId)
+        public ServiceResult<NewGameResponseDto> NewGame(NewGameRequest req)
         {
             if (string.IsNullOrWhiteSpace(req.Name))
             {
-                throw new ArgumentException("Nama pemain tidak boleh kosong.");
+                return ServiceResult<NewGameResponseDto>.Fail("Nama pemain tidak boleh kosong.");
             }
-
             if (req.StartingBalance <= 0)
             {
-                throw new ArgumentException("Saldo awal harus lebih dari 0.");
+                return ServiceResult<NewGameResponseDto>.Fail("Saldo awal harus lebih dari 0.");
             }
-
             if (req.MinBet <= 0)
             {
-                throw new ArgumentException("Min bet harus lebih dari 0.");
+                return ServiceResult<NewGameResponseDto>.Fail("Min bet harus lebih dari 0.");
             }
-
             if (req.MaxBet < req.MinBet)
             {
-                throw new ArgumentException("Max bet harus lebih besar atau sama dengan min bet.");
+                return ServiceResult<NewGameResponseDto>.Fail("Max bet harus lebih besar atau sama dengan min bet.");
             }
 
             var player = new Player(req.Name, req.StartingBalance);
@@ -51,15 +49,18 @@ namespace BlackjackApi.Services
             };
 
             _sessions[session.GameId] = session;
-            gameId = session.GameId;
 
-            Log($"Session baru dibuat untuk [{req.Name}] | GameId: {gameId}");
-            return BuildState(session);
+            Log($"Session baru dibuat untuk [{req.Name}] | GameId: {session.GameId}");
+            return ServiceResult<NewGameResponseDto>.Ok(new NewGameResponseDto(session.GameId, BuildState(session)));
         }
 
-        public GameStateDto ResumeSession(string gameId)
+        public ServiceResult<GameStateDto> ResumeSession(string gameId)
         {
             var session = GetSession(gameId);
+            if (session == null)
+            {
+                return ServiceResult<GameStateDto>.NotFoundResult("Session game tidak ditemukan atau telah berakhir.");
+            }
 
             lock (session)
             {
@@ -69,39 +70,47 @@ namespace BlackjackApi.Services
                     ? "Game dilanjutkan dari ronde sebelumnya."
                     : "Sesi ditemukan, silakan pasang taruhan.";
 
-                return BuildState(session);
+                return ServiceResult<GameStateDto>.Ok(BuildState(session));
             }
         }
 
-        public GameStateDto HandleBet(string gameId, BetRequest req)
+        public ServiceResult<GameStateDto> HandleBet(string gameId, BetRequest req)
         {
             var session = GetSession(gameId);
+            if (session == null)
+            {
+                return ServiceResult<GameStateDto>.NotFoundResult("Session game tidak ditemukan atau telah berakhir.");
+            }
 
             lock (session)
             {
                 bool accepted = _engine.PlaceBet(session.Player, session.Table, req.Amount);
-
                 if (!accepted)
                 {
-                    throw new ArgumentException("Taruhan tidak valid (di luar min/max, atau saldo kurang).");
+                    return ServiceResult<GameStateDto>.Fail(
+                        "Taruhan tidak valid (di luar min/max, atau saldo kurang).");
                 }
 
                 session.LastMessage = $"Taruhan {req.Amount} chip diterima.";
-                
+
                 Log($"Player [{session.Player.Name}] memasang bet: {req.Amount} chip.");
-                return BuildState(session);
+                return ServiceResult<GameStateDto>.Ok(BuildState(session));
             }
         }
 
-        public GameStateDto Deal(string gameId)
+        public ServiceResult<GameStateDto> Deal(string gameId)
         {
             var session = GetSession(gameId);
+            if (session == null)
+            {
+                return ServiceResult<GameStateDto>.NotFoundResult("Session game tidak ditemukan atau telah berakhir.");
+            }
 
             lock (session)
             {
                 if (session.Player.CurrentBet <= 0)
                 {
-                    throw new InvalidOperationException("Pasang taruhan dulu sebelum deal.");
+                    return ServiceResult<GameStateDto>.Fail("Pasang taruhan dulu sebelum deal.");
                 }
 
                 if (_engine.RemainingCard(session.Deck) < 15)
@@ -120,29 +129,33 @@ namespace BlackjackApi.Services
                 {
                     _engine.RevealDealerHand(session.Dealer);
 
-                    session.LastMessage = _engine.EvaluateWinner(session.Player, session.Table, session.Dealer);
+                    session.LastMessage = _engine.EvaluateWinner(session.Player, session.Dealer);
                     session.Player.CurrentBet = 0;
                 }
 
                 Log($"Kartu dibagikan untuk Player [{session.Player.Name}].");
-                return BuildState(session);
+                return ServiceResult<GameStateDto>.Ok(BuildState(session));
             }
         }
 
-        public GameStateDto HandleAction(string gameId, ActionRequest req)
+        public ServiceResult<GameStateDto> HandleAction(string gameId, ActionRequest req)
         {
             var session = GetSession(gameId);
+            if (session == null)
+            {
+                return ServiceResult<GameStateDto>.NotFoundResult("Session game tidak ditemukan atau telah berakhir.");
+            }
 
             lock (session)
             {
                 if (req.HandIndex < 0 || req.HandIndex >= session.Player.Hands.Count)
                 {
-                    throw new ArgumentException("Index tangan tidak valid.");
+                    return ServiceResult<GameStateDto>.Fail("Index tangan tidak valid.");
                 }
 
                 if (req.HandIndex != session.ActiveHandIndex)
                 {
-                    throw new InvalidOperationException("Bukan giliran tangan ini.");
+                    return ServiceResult<GameStateDto>.Fail("Bukan giliran tangan ini.");
                 }
 
                 Hand hand = session.Player.Hands[req.HandIndex];
@@ -151,19 +164,19 @@ namespace BlackjackApi.Services
 
                 session.LastMessage = result.Message;
 
-                if (!result.Success)
+                if (!result.IsSuccess)
                 {
-                    return BuildState(session);
+                    return ServiceResult<GameStateDto>.Ok(BuildState(session));
                 }
 
                 if (req.Action == ActionType.Split)
                 {
-                    return BuildState(session); 
+                    return ServiceResult<GameStateDto>.Ok(BuildState(session));
                 }
 
                 if (req.Action == ActionType.Insurance && !_engine.IsHandFinished(hand))
                 {
-                    return BuildState(session);
+                    return ServiceResult<GameStateDto>.Ok(BuildState(session));
                 }
 
                 if (_engine.IsHandFinished(hand))
@@ -187,31 +200,27 @@ namespace BlackjackApi.Services
                             _engine.PlayDealerTurn(session.Dealer, session.Deck);
                         }
 
-                        session.LastMessage = _engine.EvaluateWinner(session.Player, session.Table, session.Dealer);
+                        session.LastMessage = _engine.EvaluateWinner(session.Player, session.Dealer);
                         session.Player.CurrentBet = 0;
                     }
                 }
 
-                Log($"Player [{session.Player.Name}] melalukan aksi: {req.Action} -> {result.Message}"); 
-                return BuildState(session);
+                Log($"Player [{session.Player.Name}] melakukan aksi: {req.Action} -> {result.Message}");
+                return ServiceResult<GameStateDto>.Ok(BuildState(session));
             }
         }
 
-        private GameSessionData GetSession(string gameId)
+        private GameSessionData? GetSession(string gameId)
         {
-            if (!_sessions.TryGetValue(gameId, out var session))
-            {
-                throw new InvalidOperationException("Session game tidak ditemukan atau telah berakhir.");
-            }
-
+            _sessions.TryGetValue(gameId, out var session);
             return session;
         }
 
-        private int FindNextUnfinishedHandIndex(Player p, int afterIndex)
+        private int FindNextUnfinishedHandIndex(Player player, int afterIndex)
         {
-            for (int i = afterIndex + 1; i < p.Hands.Count; i++)
+            for (int i = afterIndex + 1; i < player.Hands.Count; i++)
             {
-                if (!_engine.IsHandFinished(p.Hands[i]))
+                if (!_engine.IsHandFinished(player.Hands[i]))
                 {
                     return i;
                 }
@@ -219,7 +228,7 @@ namespace BlackjackApi.Services
 
             return -1;
         }
-        
+
         private void Log(string message)
         {
             OnGameLog?.Invoke(message);

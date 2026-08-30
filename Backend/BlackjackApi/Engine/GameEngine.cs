@@ -1,4 +1,5 @@
-using BlackjackApi.Interfaces;
+using BlackjackApi.Models.Interfaces;
+using BlackjackApi.Models.Enums;
 using BlackjackApi.Models;
 
 namespace BlackjackApi.Engine
@@ -7,12 +8,10 @@ namespace BlackjackApi.Engine
     {
         private const int MaxScore = 21;
 
-        // ---------- Deck operations ----------
-
         public Deck CreateStandardDeck()
         {
             var deck = new Deck();
-            var ranks = Enum.GetValues<Rank>(); 
+            var ranks = Enum.GetValues<Rank>();
             var suits = Enum.GetValues<Suit>();
 
             var freshCards = new List<Card>();
@@ -23,10 +22,12 @@ namespace BlackjackApi.Engine
                     freshCards.Add(new Card(rank, suit));
                 }
             }
+
             foreach (var card in freshCards)
             {
                 deck.Cards.Push(card);
             }
+
             ShuffleDeck(deck);
 
             return deck;
@@ -38,15 +39,14 @@ namespace BlackjackApi.Engine
             {
                 throw new InvalidOperationException("Deck kosong, tidak ada kartu tersisa untuk diambil.");
             }
+
             return deck.Cards.Pop();
         }
 
-        // ---------- Hand calculations ----------
-
-        public int GetHandScore(Hand h)
+        public int GetHandScore(Hand hand)
         {
-            int score = h.Cards.Sum(c => c.Value);
-            int aceCount = h.Cards.Count(c => c.Rank == Rank.Ace);
+            int score = hand.Cards.Sum(c => c.Value);
+            int aceCount = hand.Cards.Count(c => c.Rank == Rank.Ace);
 
             while (score > MaxScore && aceCount > 0)
             {
@@ -57,14 +57,14 @@ namespace BlackjackApi.Engine
             return score;
         }
 
-        public bool IsHandBusted(Hand h) => GetHandScore(h) > MaxScore;
+        public bool IsHandBusted(Hand hand) => GetHandScore(hand) > MaxScore;
 
-        public bool IsHandBlackjack(Hand h) => h.Cards.Count == 2 && GetHandScore(h) == 21;
+        public bool IsHandBlackjack(Hand hand) => hand.Cards.Count == 2 && GetHandScore(hand) == 21;
 
-        public bool IsHandSoft(Hand h)
+        public bool IsHandSoft(Hand hand)
         {
-            int score = h.Cards.Sum(c => c.Value);
-            int aceCount = h.Cards.Count(c => c.Rank == Rank.Ace);
+            int score = hand.Cards.Sum(c => c.Value);
+            int aceCount = hand.Cards.Count(c => c.Rank == Rank.Ace);
 
             while (score > MaxScore && aceCount > 0)
             {
@@ -75,27 +75,24 @@ namespace BlackjackApi.Engine
             return aceCount > 0;
         }
 
-        public bool IsHandFinished(Hand h) => IsHandBusted(h) || h.IsFinished;
+        public bool IsHandFinished(Hand hand) => IsHandBusted(hand) || hand.IsFinished;
 
-        // ---------- Player calculations ----------
+        public int GetTotalBalance(Player player) => player.Balance.Sum(kv => (int)kv.Key * kv.Value);
 
-        public int GetTotalBalance(Player p) => p.Balance.Sum(kv => (int)kv.Key * kv.Value);
-
-        // ---------- Game lifecycle ----------
-        public void StartGame(Player p, Deck deck, Dealer dealer)
+        public void StartGame(Player player, Deck deck, Dealer dealer)
         {
-            p.Hands.Clear();
-            p.Hands.Add(new Hand());
-            p.Hands[0].Cards.Add(DrawCard(deck));
+            player.Hands.Clear();
+            player.Hands.Add(new Hand());
+            player.Hands[0].Cards.Add(DrawCard(deck));
             dealer.Hand.Cards.Add(DrawCard(deck));
-            p.Hands[0].Cards.Add(DrawCard(deck));
+            player.Hands[0].Cards.Add(DrawCard(deck));
             dealer.Hand.Cards.Add(DrawCard(deck));
             dealer.HoleCardHidden = true;
         }
-        
-        public bool ResumeGame(Player p, Dealer dealer)
+
+        public bool ResumeGame(Player player, Dealer dealer)
         {
-            bool roundInProgress = dealer.HoleCardHidden && p.Hands.Any(h => h.Cards.Count > 0);
+            bool roundInProgress = dealer.HoleCardHidden && player.Hands.Any(hand => hand.Cards.Count > 0);
             return roundInProgress;
         }
 
@@ -114,142 +111,124 @@ namespace BlackjackApi.Engine
             dealer.HoleCardHidden = false;
         }
 
-        // ---------- Card actions ----------
-
-        public ActionResult PerformAction(Player p, ActionType action, Deck deck, Hand h, Dealer dealer)
+        public GameActionResult PerformAction(Player player, ActionType action, Deck deck, Hand hand, Dealer dealer)
         {
-            if (IsHandFinished(h) && action != ActionType.Insurance)
+            if (IsHandFinished(hand) && action != ActionType.Insurance)
             {
-                return FailResult("Tangan ini sudah selesai, tidak bisa diambil aksi lagi.");
+                return GameActionResult.Failure("Tangan ini sudah selesai, tidak bisa diambil aksi lagi.");
             }
 
             switch (action)
             {
                 case ActionType.Hit:
-                    h.Cards.Add(DrawCard(deck));
-                    if (IsHandBusted(h))
+                    hand.Cards.Add(DrawCard(deck));
+                    if (IsHandBusted(hand))
                     {
-                        return SuccessResult("Kartu diambil. Bust!");
+                        return GameActionResult.Success("Kartu diambil. Bust!");
                     }
 
-                    return SuccessResult("Kartu diambil.");
+                    return GameActionResult.Success("Kartu diambil.");
 
                 case ActionType.Stand:
-                    h.IsFinished = true;
-                    return SuccessResult("Pemain stand.");
+                    hand.IsFinished = true;
+                    return GameActionResult.Success("Pemain stand.");
 
                 case ActionType.DoubleDown:
-                    if (h.Cards.Count != 2)
+                    if (hand.Cards.Count != 2)
                     {
-                        return FailResult("Double down hanya boleh dilakukan di 2 kartu pertama.");
+                        return GameActionResult.Failure("Double down hanya boleh dilakukan di 2 kartu pertama.");
                     }
 
-                    if (GetTotalBalance(p) < p.CurrentBet)
+                    if (GetTotalBalance(player) < player.CurrentBet)
                     {
-                        return FailResult("Saldo tidak cukup untuk double down.");
+                        return GameActionResult.Failure("Saldo tidak cukup untuk double down.");
                     }
 
-                    RemoveChips(ChipType.White, p.CurrentBet, p);
-                    p.CurrentBet *= 2;
-                    h.Cards.Add(DrawCard(deck));
-                    h.IsFinished = true;
-                    if (IsHandBusted(h))
+                    RemoveChips(ChipType.White, player.CurrentBet, player);
+                    player.CurrentBet *= 2;
+                    hand.Cards.Add(DrawCard(deck));
+                    hand.IsFinished = true;
+
+                    if (IsHandBusted(hand))
                     {
-                        return SuccessResult("Double down. Bust!");
+                        return GameActionResult.Success("Double down. Bust!");
                     }
 
-                    return SuccessResult("Double down selesai.");
+                    return GameActionResult.Success("Double down selesai.");
 
                 case ActionType.Split:
-                    if (h.Cards.Count != 2 || h.Cards[0].Value != h.Cards[1].Value)
+                    if (hand.Cards.Count != 2 || hand.Cards[0].Value != hand.Cards[1].Value)
                     {
-                        return FailResult("Split hanya boleh jika 2 kartu punya nilai sama.");
+                        return GameActionResult.Failure("Split hanya boleh jika 2 kartu punya nilai sama.");
                     }
 
-                    if (GetTotalBalance(p) < p.CurrentBet)
+                    if (GetTotalBalance(player) < player.CurrentBet)
                     {
-                        return FailResult("Saldo tidak cukup untuk split.");
+                        return GameActionResult.Failure("Saldo tidak cukup untuk split.");
                     }
 
-                    RemoveChips(ChipType.White, p.CurrentBet, p);
-                    var secondCard = h.Cards[1];
-                    h.Cards.RemoveAt(1);
+                    RemoveChips(ChipType.White, player.CurrentBet, player);
+                    var secondCard = hand.Cards[1];
+                    hand.Cards.RemoveAt(1);
                     var newHand = new Hand();
                     newHand.Cards.Add(secondCard);
-                    h.Cards.Add(DrawCard(deck));
+                    hand.Cards.Add(DrawCard(deck));
                     newHand.Cards.Add(DrawCard(deck));
-                    p.Hands.Add(newHand);
-                    return SuccessResult("Split berhasil, tangan baru dibuat.");
+                    player.Hands.Add(newHand);
+
+                    return GameActionResult.Success("Split berhasil, tangan baru dibuat.");
 
                 case ActionType.Surrender:
-                    h.IsFinished = true;
-                    h.IsSurrendered = true;
-                    AddChips(ChipType.White, p.CurrentBet / 2, p);
-                    return SuccessResult("Menyerah, setengah taruhan dikembalikan.");
+                    hand.IsFinished = true;
+                    hand.IsSurrendered = true;
+                    AddChips(ChipType.White, player.CurrentBet / 2, player);
+
+                    return GameActionResult.Success("Menyerah, setengah taruhan dikembalikan.");
 
                 case ActionType.Insurance:
-                    if (h.Cards.Count != 2 || h.IsFinished)
+                    if (hand.Cards.Count != 2 || hand.IsFinished)
                     {
-                        return FailResult("Insurance cuma bisa diambil sebelum aksi lain di tangan ini.");
+                        return GameActionResult.Failure("Insurance cuma bisa diambil sebelum aksi lain di tangan ini.");
                     }
 
-                    if (h.InsuranceTaken)
+                    if (hand.InsuranceTaken)
                     {
-                        return FailResult("Insurance sudah diambil untuk tangan ini.");
+                        return GameActionResult.Failure("Insurance sudah diambil untuk tangan ini.");
                     }
 
                     if (dealer.Hand.Cards.Count == 0 || dealer.Hand.Cards[0].Rank != Rank.Ace)
                     {
-                        return FailResult("Insurance cuma tersedia kalau kartu terbuka dealer itu As.");
+                        return GameActionResult.Failure("Insurance cuma tersedia kalau kartu terbuka dealer itu As.");
                     }
 
-                    int insuranceCost = p.CurrentBet / 2;
-                    if (GetTotalBalance(p) < insuranceCost)
+                    int insuranceCost = player.CurrentBet / 2;
+                    if (GetTotalBalance(player) < insuranceCost)
                     {
-                        return FailResult("Saldo tidak cukup untuk insurance.");
+                        return GameActionResult.Failure("Saldo tidak cukup untuk insurance.");
                     }
 
-                    h.InsuranceTaken = true;
-                    RemoveChips(ChipType.White, insuranceCost, p);
+                    hand.InsuranceTaken = true;
+                    RemoveChips(ChipType.White, insuranceCost, player);
+
                     if (dealer.Hand.Cards.Count == 2 && GetHandScore(dealer.Hand) == 21)
                     {
-                        AddChips(ChipType.White, insuranceCost * 3, p);
-                        h.IsFinished = true;
-                        return SuccessResult("Insurance dibayar, dealer blackjack.");
+                        AddChips(ChipType.White, insuranceCost * 3, player);
+                        hand.IsFinished = true;
+                        return GameActionResult.Success("Insurance dibayar, dealer blackjack.");
                     }
-                    
-                    return SuccessResult("Insurance diambil, dealer bukan blackjack.");
+
+                    return GameActionResult.Success("Insurance diambil, dealer bukan blackjack.");
+
                 default:
-                    return FailResult("Aksi tidak dikenal.");
+                    return GameActionResult.Failure("Aksi tidak dikenal.");
             }
         }
 
-        private static ActionResult SuccessResult(string message)
+        public string EvaluateWinner(Player player, Dealer dealer)
         {
-            return new ActionResult
-            {
-                Success = true,
-                Message = message
-            };
-        }
-
-        private static ActionResult FailResult(string message)
-        {
-            return new ActionResult
-            {
-                Success = false,
-                Message = message
-            };
-        }
-
-        // ---------- Winner evaluation ----------
-
-        public string EvaluateWinner(Player p, Table table, Dealer dealer)
-        {
-          
             var messages = new List<string>();
 
-            foreach (var hand in p.Hands)
+            foreach (var hand in player.Hands)
             {
                 HandResult result;
 
@@ -282,35 +261,32 @@ namespace BlackjackApi.Engine
                     result = HandResult.Push;
                 }
 
-                messages.Add(ResultHand(p, result));
-                
+                messages.Add(ResultHand(player, result));
             }
 
             return string.Join(" | ", messages);
         }
 
-        public string ResultHand(Player p, HandResult handResults)
+        public string ResultHand(Player player, HandResult handResults)
         {
             switch (handResults)
             {
                 case HandResult.Win:
-                    AddChips(ChipType.White, p.CurrentBet * 2, p);
-                    return $"{p.Name} menang, mendapat {p.CurrentBet * 2} chip.";
+                    AddChips(ChipType.White, player.CurrentBet * 2, player);
+                    return $"{player.Name} menang, mendapat {player.CurrentBet * 2} chip.";
                 case HandResult.BlackJack:
-                    AddChips(ChipType.White, (int)(p.CurrentBet * 2.5), p);
-                    return $"{p.Name} Blackjack! Mendapat {(int)(p.CurrentBet * 2.5)} chip.";
+                    AddChips(ChipType.White, (int)(player.CurrentBet * 2.5), player);
+                    return $"{player.Name} Blackjack! Mendapat {(int)(player.CurrentBet * 2.5)} chip.";
                 case HandResult.Push:
-                    AddChips(ChipType.White, p.CurrentBet, p);
-                    return $"{p.Name} seri (push), taruhan dikembalikan.";
+                    AddChips(ChipType.White, player.CurrentBet, player);
+                    return $"{player.Name} seri (push), taruhan dikembalikan.";
                 case HandResult.Surrender:
-                    return $"{p.Name} menyerah pada ronde ini.";
+                    return $"{player.Name} menyerah pada ronde ini.";
                 case HandResult.Lose:
                 default:
-                    return $"{p.Name} kalah, kehilangan {p.CurrentBet} chip.";
+                    return $"{player.Name} kalah, kehilangan {player.CurrentBet} chip.";
             }
         }
-
-        // ---------- IDeck ----------
 
         public void ShuffleDeck(Deck deck)
         {
@@ -322,32 +298,28 @@ namespace BlackjackApi.Engine
                 deck.Cards.Push(card);
             }
         }
-        
+
         public int RemainingCard(Deck deck) => deck.Cards.Count;
 
-        // ---------- IBetting ----------
-
-        public bool PlaceBet(Player p, Table table, int amount)
+        public bool PlaceBet(Player player, Table table, int amount)
         {
             if (!IsValidBet(table, amount))
             {
                 return false;
             }
 
-            if (GetTotalBalance(p) < amount)
+            if (GetTotalBalance(player) < amount)
             {
                 return false;
             }
 
-            RemoveChips(ChipType.White, amount, p);
-            p.CurrentBet = amount;
+            RemoveChips(ChipType.White, amount, player);
+            player.CurrentBet = amount;
             return true;
         }
 
         public bool IsValidBet(Table table, int amount) => amount >= table.MinBet && amount <= table.MaxBet;
 
-        // ---------- Chips ----------
-        
         private int AddChips(ChipType type, int totalChips, Player player)
         {
             player.Balance.TryGetValue(type, out var current);
