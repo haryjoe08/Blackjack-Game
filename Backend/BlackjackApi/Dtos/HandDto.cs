@@ -5,13 +5,13 @@ namespace BlackjackApi.Dtos
 {
     public record HandDto(List<CardDto> Cards, int Score, bool IsBusted, bool IsBlackjack, bool IsSoft)
     {
-        public static HandDto From(GameEngine engine, Hand h) => new(
-            h.Cards
+        public static HandDto From(GameEngine engine, Hand hand) => new(
+            hand.Cards
                 .Select(card => CardDto.From(card))
                 .ToList(),
-            engine.GetHandScore(h),
-            engine.IsHandBusted(h),
-            engine.IsHandBlackjack(h),
-            engine.IsHandSoft(h));
+            engine.GetHandScore(hand),
+            engine.IsHandBusted(hand),
+            engine.IsHandBlackjack(hand),
+            engine.IsHandSoft(hand));
     }
 }

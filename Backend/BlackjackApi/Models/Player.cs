@@ -1,4 +1,4 @@
-using BlackjackApi.Models;
+using BlackjackApi.Models.Enums;
 
 namespace BlackjackApi.Models
 {
@@ -15,8 +15,6 @@ namespace BlackjackApi.Models
         {
             Name = name;
             PlayerId = _nextId++;
-            // Balance is set to White because White = 1;
-            // White * balance = balance
             Balance[ChipType.White] = balance;
         }
     }

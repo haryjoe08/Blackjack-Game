@@ -1,4 +1,4 @@
-using BlackjackApi.Models;
+using BlackjackApi.Models.Enums;
 
 namespace BlackjackApi.Dtos
 {

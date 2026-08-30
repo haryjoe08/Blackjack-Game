@@ -1,4 +1,4 @@
-namespace BlackjackApi.Models
+namespace BlackjackApi.Models.Enums
 {
     public enum Rank
     {

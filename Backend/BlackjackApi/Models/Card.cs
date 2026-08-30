@@ -1,3 +1,4 @@
+using BlackjackApi.Models.Enums;
 namespace BlackjackApi.Models
 {
     public class Card
