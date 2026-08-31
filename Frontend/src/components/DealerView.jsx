@@ -11,7 +11,9 @@ export default function DealerView({ dealer }) {
       </div>
       <div className="flex items-center gap-2.5 text-sm">
         <span>Dealer</span>
-        <span className="font-bold text-amber-300">{dealer.holeCardHidden ? '?' : dealer.score}</span>
+        <span key={dealer.holeCardHidden ? 'hidden' : dealer.score} className="font-bold text-amber-300 animate-popIn">
+          {dealer.holeCardHidden ? '?' : dealer.score}
+        </span>
       </div>
     </div>
   )

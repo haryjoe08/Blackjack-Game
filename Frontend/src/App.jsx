@@ -1,86 +1,30 @@
-import { useState, useEffect } from 'react'
-import { api, sessionStore } from './api.js'
-import HandView from './components/HandView.jsx'
-import DealerView from './components/DealerView.jsx'
+import { useState, useEffect, useRef } from 'react'
+import { api } from './api.js'
 import BettingPanel from './components/BettingPanel.jsx'
 import ActionPanel from './components/ActionPanel.jsx'
+import LandingPage from './components/LandingPage.jsx'
+import NewGameForm from './components/NewGameForm.jsx'
+import GameOverPanel from './components/GameOverPanel.jsx'
+import GameHeader from './components/GameHeader.jsx'
+import GameTable from './components/GameTable.jsx'
+import { messageBannerClass } from './uiClasses.js'
+import { isMuted, setMuted, playWin, playLose, playBlackjack, playPush, playClick } from './sound.js'
 
-const inputClass = 'px-2.5 py-2 rounded-md border border-neutral-700 bg-neutral-900 text-white'
-const panelClass = 'bg-black/30 border border-amber-300/25 rounded-xl px-5 py-4 w-full max-w-md'
-const primaryButtonClass =
-  'w-full mt-2 px-4 py-2.5 rounded-lg bg-amber-300 text-neutral-900 font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-200 transition-colors'
-
-function NewGameForm({ onStart, busy }) {
-  const [name, setName] = useState('Player 1')
-  const [balance, setBalance] = useState(1000)
-  const [minBet, setMinBet] = useState(10)
-  const [maxBet, setMaxBet] = useState(500)
-
-  return (
-    <div className={panelClass}>
-      <h2 className="text-lg font-semibold mb-3">Meja Blackjack Baru</h2>
-      <label className="flex flex-col gap-1 mb-3 text-sm">
-        Nama Pemain
-        <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
-      </label>
-      <label className="flex flex-col gap-1 mb-3 text-sm">
-        Saldo Awal
-        <input
-          className={inputClass}
-          type="number"
-          value={balance}
-          onChange={(e) => setBalance(Number(e.target.value))}
-        />
-      </label>
-      <div className="flex gap-3">
-        <label className="flex flex-col gap-1 mb-3 text-sm flex-1">
-          Min Bet
-          <input
-            className={inputClass}
-            type="number"
-            value={minBet}
-            onChange={(e) => setMinBet(Number(e.target.value))}
-          />
-        </label>
-        <label className="flex flex-col gap-1 mb-3 text-sm flex-1">
-          Max Bet
-          <input
-            className={inputClass}
-            type="number"
-            value={maxBet}
-            onChange={(e) => setMaxBet(Number(e.target.value))}
-          />
-        </label>
-      </div>
-      <button
-        className={primaryButtonClass}
-        disabled={busy || !name || balance <= 0 || minBet <= 0 || maxBet < minBet}
-        onClick={() => onStart(name, balance, minBet, maxBet)}
-      >
-        Mulai Bermain
-      </button>
-    </div>
-  )
-}
-
-function GameOverPanel({ finalBalance, onRestart }) {
-  return (
-    <div className={`${panelClass} text-center`}>
-      <h2 className="text-lg font-semibold text-amber-300 mt-0">Game Over</h2>
-      <p>Saldo kamu ({finalBalance}) sudah di bawah taruhan minimum meja ini.</p>
-      <button className={primaryButtonClass} onClick={onRestart}>
-        Main Lagi
-      </button>
-    </div>
-  )
-}
+const feltClass =
+  'min-h-screen p-4 w-full mx-auto flex flex-col items-center gap-5 text-neutral-100 bg-[radial-gradient(ellipse_at_center,_#1b5e3a_0%,_#0e3521_70%,_#082014_100%)]'
 
 export default function App() {
   const [state, setState] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const [tableConfig, setTableConfig] = useState(null)
+  const [muted, setMutedState] = useState(() => isMuted())
+
+  const [showLanding, setShowLanding] = useState(true)
+
   const [checkingResume, setCheckingResume] = useState(true)
+
+  const playedMessageRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -91,6 +35,7 @@ export default function App() {
         if (resumed) {
           setState(resumed)
           setTableConfig({ minBet: resumed.minBet, maxBet: resumed.maxBet })
+          setShowLanding(false)
         }
       })
       .catch((err) => {
@@ -103,6 +48,21 @@ export default function App() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!state) return
+    const inProgress = state.hands.some((h) => h.cards.length > 0)
+    const over = inProgress && !state.dealer.holeCardHidden
+    if (!over || !state.lastMessage) return
+    if (playedMessageRef.current === state.lastMessage) return
+    playedMessageRef.current = state.lastMessage
+
+    const msg = state.lastMessage
+    if (msg.includes('Blackjack!')) playBlackjack()
+    else if (msg.includes('menang')) playWin()
+    else if (msg.includes('kalah') || msg.includes('menyerah')) playLose()
+    else if (msg.includes('seri')) playPush()
+  }, [state])
 
   async function run(fn) {
     setBusy(true)
@@ -131,14 +91,19 @@ export default function App() {
   const performAction = (action) => run(() => api.action(action, state.activeHandIndex))
 
   const restart = () => {
-    sessionStore.clearGameId()
+    api.forgetGame()
     setState(null)
     setTableConfig(null)
     setError(null)
+    setShowLanding(false) 
   }
 
-  const feltClass =
-    'min-h-screen p-6 w-full mx-auto flex flex-col items-center gap-5 text-neutral-100 bg-[radial-gradient(ellipse_at_center,_#1b5e3a_0%,_#0e3521_70%,_#082014_100%)]'
+  const toggleMute = () => {
+    playClick()
+    const next = !muted
+    setMuted(next)
+    setMutedState(next)
+  }
 
   if (checkingResume) {
     return (
@@ -152,8 +117,11 @@ export default function App() {
   if (!state) {
     return (
       <div className={feltClass}>
-        <h1 className="text-3xl tracking-widest uppercase text-amber-300 m-0">Blackjack</h1>
-        <NewGameForm onStart={startGame} busy={busy} />
+        {showLanding ? (
+          <LandingPage onPlay={() => setShowLanding(false)} />
+        ) : (
+          <NewGameForm onStart={startGame} busy={busy} />
+        )}
         {error && <p className="text-red-400 font-semibold">{error}</p>}
       </div>
     )
@@ -163,42 +131,37 @@ export default function App() {
   const roundInProgress = state.hands.some((h) => h.cards.length > 0)
   const roundOver = roundInProgress && !state.dealer.holeCardHidden
 
+  const handleNewSession = () => {
+    if (roundInProgress && !roundOver) {
+      const confirmed = window.confirm(
+        'Ronde masih berjalan. Yakin mau mulai sesi baru? Progress ronde ini akan hilang.'
+      )
+      if (!confirmed) return
+    }
+    playClick()
+    restart()
+  }
+
   return (
     <div className={feltClass}>
-      <header className="w-full flex justify-between items-center flex-wrap gap-3">
-        <h1 className="text-3xl tracking-widest uppercase text-amber-300 m-0">Blackjack</h1>
-        <div className="flex items-center gap-4 text-sm bg-black/25 px-3.5 py-2 rounded-lg">
-          <span>{state.name}</span>
-          <span>Saldo: {state.balance}</span>
-          <span>Taruhan: {state.currentBet}</span>
-          <span>Sisa kartu: {state.remainingCards}</span>
-          <button
-            onClick={restart}
-            className="ml-2 px-2.5 py-1 text-xs rounded bg-red-800/80 hover:bg-red-700 text-white transition-colors cursor-pointer"
-            title="Keluar dari sesi game ini"
-          >
-            Sesi Baru
-          </button>
-        </div>
-      </header>
+      <GameHeader state={state} muted={muted} onToggleMute={toggleMute} onNewSession={handleNewSession} />
 
-      <DealerView dealer={state.dealer} />
-
-      {roundInProgress && (
-        <div className="flex gap-5 flex-wrap justify-center w-full">
-          {state.hands.map((hand, i) => (
-            <HandView
-              key={i}
-              hand={hand}
-              index={i}
-              isActive={roundInProgress && !roundOver && i === state.activeHandIndex}
-            />
-          ))}
-        </div>
-      )}
+      <GameTable
+        dealer={state.dealer}
+        hands={state.hands}
+        roundInProgress={roundInProgress}
+        roundOver={roundOver}
+        activeHandIndex={state.activeHandIndex}
+      />
 
       {state.lastMessage && (
-        <p className="bg-black/35 px-4 py-2.5 rounded-lg font-semibold text-center">{state.lastMessage}</p>
+        <p
+          className={`px-4 py-2.5 rounded-lg font-semibold text-center transition-colors ${messageBannerClass(
+            state.lastMessage
+          )}`}
+        >
+          {state.lastMessage}
+        </p>
       )}
       {error && <p className="text-red-400 font-semibold">{error}</p>}
 

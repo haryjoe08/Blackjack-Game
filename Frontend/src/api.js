@@ -1,10 +1,15 @@
 const BASE_URL = 'http://localhost:5080/api/game'
-const STORAGE_KEY = 'blackjack_game_id'
+const GAME_ID_STORAGE_KEY = 'blackjack_game_id'
 
-export const sessionStore = {
-  getGameId: () => localStorage.getItem(STORAGE_KEY),
-  setGameId: (id) => localStorage.setItem(STORAGE_KEY, id),
-  clearGameId: () => localStorage.removeItem(STORAGE_KEY),
+
+function getGameId() {
+  return localStorage.getItem(GAME_ID_STORAGE_KEY)
+}
+function setGameId(id) {
+  localStorage.setItem(GAME_ID_STORAGE_KEY, id)
+}
+function clearGameId() {
+  localStorage.removeItem(GAME_ID_STORAGE_KEY)
 }
 
 async function extractErrorMessage(res) {
@@ -14,7 +19,7 @@ async function extractErrorMessage(res) {
       return body.message
     }
   } catch {
- 
+    
   }
   return `Request gagal (${res.status})`
 }
@@ -22,7 +27,7 @@ async function extractErrorMessage(res) {
 async function request(path, options) {
   const res = await fetch(`${BASE_URL}${path}`, {
     headers: { 'Content-Type': 'application/json' },
-    ...options,sessionStore
+    ...options,
   })
 
   if (!res.ok) {
@@ -32,55 +37,51 @@ async function request(path, options) {
   return res.json()
 }
 
+function gameRequest(path, options) {
+  const gameId = getGameId()
+  if (!gameId) {
+    throw new Error('Belum ada game aktif - mulai game baru dulu.')
+  }
+  return request(`/${gameId}${path}`, options)
+}
+
 export const api = {
-  // Cek dan resume game dari gameId yang ada di localStorage
+
   resume: async () => {
-    const gameId = sessionStore.getGameId()
+    const gameId = getGameId()
     if (!gameId) return null
 
     const res = await fetch(`${BASE_URL}/${gameId}/resume`)
     if (res.status === 404) {
-      sessionStore.clearGameId()
+      clearGameId()
       return null
     }
     if (!res.ok) throw new Error(await extractErrorMessage(res))
     return res.json()
   },
 
-  // Buat sesi game baru dan simpan gameId yang didapat dari backend
   newGame: async (name, startingBalance, minBet, maxBet) => {
-    const data = await request('/new', {
+    const { gameId, state } = await request('/new', {
       method: 'POST',
       body: JSON.stringify({ name, startingBalance, minBet, maxBet }),
     })
-
-    // Tangkap gameId dari response body 
-    const gameId = data.gameId 
-    if (gameId) {
-      sessionStore.setGameId(gameId)
-    }
-
-    return data.state 
+    setGameId(gameId)
+    return state
   },
 
-  placeBet: (amount) => {
-    const gameId = sessionStore.getGameId()
-    return request(`/${gameId}/bet`, {
+  forgetGame: () => clearGameId(),
+
+  placeBet: (amount) =>
+    gameRequest('/bet', {
       method: 'POST',
       body: JSON.stringify({ amount }),
-    })
-  },
+    }),
 
-  deal: () => {
-    const gameId = sessionStore.getGameId()
-    return request(`/${gameId}/deal`, { method: 'POST' })
-  },
+  deal: () => gameRequest('/deal', { method: 'POST' }),
 
-  action: (action, handIndex = 0) => {
-    const gameId = sessionStore.getGameId()
-    return request(`/${gameId}/action`, {
+  action: (action, handIndex = 0) =>
+    gameRequest('/action', {
       method: 'POST',
       body: JSON.stringify({ action, handIndex }),
-    })
-  },
+    }),
 }

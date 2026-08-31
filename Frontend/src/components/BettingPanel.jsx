@@ -1,30 +1,34 @@
 import { useState } from 'react'
 import { CHIP_TYPES, formatChipLabel } from '../chipTypes.js'
+import { playChip, playClick } from '../sound.js'
 
 export default function BettingPanel({ minBet, maxBet, balance, onBet, disabled }) {
   const [amount, setAmount] = useState(0)
 
-
+ 
   const availableChips = CHIP_TYPES.filter((c) => c.value <= maxBet)
 
   const addChip = (value) => {
+    playChip()
     setAmount((prev) => Math.min(prev + value, maxBet, balance))
   }
 
-  const clear = () => setAmount(0)
+  const clear = () => {
+    playClick()
+    setAmount(0)
+  }
 
   const canDeal = amount >= minBet && amount <= maxBet && amount <= balance
 
   return (
-    <div className="bg-black/30 border border-amber-300/25 rounded-xl px-5 py-4 max-w-screen-lg">
-      <h3 className="text-lg font-semibold mb-1">Pasang Taruhan</h3>
-      <p className="text-neutral-300 text-sm mb-2">
-        Min {minBet} &middot; Max {maxBet} &middot; Saldo {balance}
-      </p>
+    <div className="bg-black/30 border border-amber-300/25 rounded-xl px-5 py-2 w-full max-w-5xl ">
+     
 
       <div className="flex flex-col items-center justify-center w-24 h-24 rounded-full border-4 border-dashed border-amber-300/50 mx-auto my-3 bg-black/20">
-        <span className="text-[11px] uppercase tracking-wide text-neutral-300">Taruhan</span>
-        <span className="text-2xl font-bold text-amber-300">{amount}</span>
+        <span className="text-[11px] uppercase tracking-wide text-neutral-300">Bet Amount</span>
+        <span key={amount} className="text-2xl font-bold text-amber-300 animate-popIn">
+          {amount}
+        </span>
       </div>
 
       <div className="flex gap-2.5 flex-wrap justify-center my-3.5">
@@ -55,8 +59,11 @@ export default function BettingPanel({ minBet, maxBet, balance, onBet, disabled 
           Clear
         </button>
         <button
-          className="px-6 py-2.5 rounded-lg bg-amber-300 text-neutral-900 font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-200 transition-colors"
-          onClick={() => onBet(amount)}
+          className="px-6 py-2.5 rounded-lg bg-amber-300 text-neutral-900 font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-200 hover:scale-105 active:scale-95 transition-all"
+          onClick={() => {
+            playClick()
+            onBet(amount)
+          }}
           disabled={disabled || !canDeal}
         >
           Deal

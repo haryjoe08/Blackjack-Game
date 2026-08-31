@@ -1,3 +1,6 @@
+import { useEffect, useRef } from 'react'
+import { playCard } from '../sound.js'
+
 const RANK_LABEL = {
   Two: '2', Three: '3', Four: '4', Five: '5', Six: '6', Seven: '7',
   Eight: '8', Nine: '9', Ten: '10', Jack: 'J', Queen: 'Q', King: 'K', Ace: 'A',
@@ -7,8 +10,16 @@ const SUIT_SYMBOL = { Heart: '\u2665', Diamond: '\u2666', Clubs: '\u2663', Spade
 const RED_SUITS = new Set(['Heart', 'Diamond'])
 
 export default function CardView({ card, faceDown = false }) {
+  const hasPlayed = useRef(false)
+  useEffect(() => {
+    if (!hasPlayed.current) {
+      hasPlayed.current = true
+      playCard()
+    }
+  }, [])
+
   const base =
-    'w-16 h-[92px] -ml-4 first:ml-0 rounded-lg shadow-lg relative flex items-center justify-center select-none'
+    'w-16 h-[92px] -ml-4 first:ml-0 rounded-lg shadow-lg relative flex items-center justify-center select-none animate-dealCard'
 
   if (faceDown) {
     return (
