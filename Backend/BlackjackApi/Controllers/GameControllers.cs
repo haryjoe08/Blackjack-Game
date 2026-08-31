@@ -14,13 +14,11 @@ namespace BlackjackApi.Controllers
         {
             _session = session;
         }
-
-
+        
         [HttpPost("new")]
         public ActionResult<NewGameResponseDto> NewGame([FromBody] NewGameRequest req) =>
             ToActionResult(_session.NewGame(req));
-
-
+        
         [HttpGet("{gameId}/resume")]
         public ActionResult<GameStateDto> Resume(string gameId) =>
             ToActionResult(_session.ResumeSession(gameId));
