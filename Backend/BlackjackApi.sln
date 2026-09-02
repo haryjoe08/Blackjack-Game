@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlackjackApi", "BlackjackApi\BlackjackApi.csproj", "{A4C8C3B7-6B8C-403D-9EF7-BF0F595D8963}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlackjackApi.Tests", "BlackjackApi.Tests\BlackjackApi.Tests.csproj", "{F25188F7-D2AD-4994-A830-CBB6939868B8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,18 @@ Global
 		{A4C8C3B7-6B8C-403D-9EF7-BF0F595D8963}.Release|x64.Build.0 = Release|Any CPU
 		{A4C8C3B7-6B8C-403D-9EF7-BF0F595D8963}.Release|x86.ActiveCfg = Release|Any CPU
 		{A4C8C3B7-6B8C-403D-9EF7-BF0F595D8963}.Release|x86.Build.0 = Release|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Debug|x64.Build.0 = Debug|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Debug|x86.Build.0 = Debug|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Release|x64.ActiveCfg = Release|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Release|x64.Build.0 = Release|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Release|x86.ActiveCfg = Release|Any CPU
+		{F25188F7-D2AD-4994-A830-CBB6939868B8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
