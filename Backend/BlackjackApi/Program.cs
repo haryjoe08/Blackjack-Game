@@ -1,7 +1,10 @@
 using System.Text.Json.Serialization;
 using BlackjackApi.Services;
 using BlackjackApi.Engine;
-
+using Serilog;
+using Serilog.Formatting.Compact;
+using Serilog.Formatting.Json;
+using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,18 +32,28 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Membangun aplikasi Web API berdasarkan konfigurasi builder di atas
-var app = builder.Build();
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
 
+    .MinimumLevel.Override("BlackjackApi", LogEventLevel.Information)
+    .WriteTo.File(
+        formatter: new JsonFormatter(renderMessage: true),
+        path: "logs/blackjack-game.log",
+        rollingInterval: RollingInterval.Day
+    )
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+var app = builder.Build();
 
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// Menerapkan aturan izin CORS yang sudah dikonfigurasi sebelumnya
 app.UseCors("AllowReactDev");
 
-// Memetakan HTTP request yang masuk ke masing-masing Controller yang sesuai
 app.MapControllers();
 
-// Menjalankan HTTP web server ASP.NET Core
 app.Run();
